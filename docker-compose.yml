@@ -1,0 +1,55 @@
+services:
+  # ── PostgreSQL ────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-expediate}
+      POSTGRES_USER: ${DB_USER:-expediate}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-expediate}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-expediate}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Django Backend ────────────────────────────
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_ENGINE: django.db.backends.postgresql
+      DB_NAME: ${DB_NAME:-expediate}
+      DB_USER: ${DB_USER:-expediate}
+      DB_PASSWORD: ${DB_PASSWORD:-expediate}
+      DB_HOST: db
+      DB_PORT: "5432"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - backend_static:/app/staticfiles
+
+  # ── React Frontend ───────────────────────────
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+
+  # ── Nginx Reverse Proxy ──────────────────────
+  nginx:
+    image: nginx:stable-alpine
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-80}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+      - frontend
+
+volumes:
+  postgres_data:
+  backend_static:
